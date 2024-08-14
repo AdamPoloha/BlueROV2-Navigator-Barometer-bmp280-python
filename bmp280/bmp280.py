@@ -29,26 +29,37 @@ REG_DATA_LENGTH = 6
 
 class Compensation:
     def __init__(self, data):
-        data = bytes(data)
-        if len(data) != REG_COMP_LENGTH:
-            raise Exception("expected %d bytes, got %d" % (REG_COMP_LENGTH % len(data)))
+        default = False
+        if not default:
+            #print(data)
+            datac = [27730, 25970, 50, 37256, -10566, 3024, 6799, -70, -7, 15500, -14600, 6000] #default
+            if len(data) != REG_COMP_LENGTH:
+                raise Exception("expected %d bytes, got %d", REG_COMP_LENGTH, len(data))
+            #("<HhhHhhhhhhhh", data)
+            #(27730, 25970, 50, 37256, -10566, 3024, 6799, -70, -7, 15500, -14600, 6000)
+            c = 0
+            while c < 24:
+                h = data[c+1]
+                if h > 127 and c != 0 and c != 6:
+                    h = h - 256
+                datac[int(c/2)] = (h * 256) + data[c]
+                #print(datac[int(c/2)])
+                c = c + 2
+            #exit()
+            self.data = datac
 
-        # compensation data bytes read out of registers 0x88~0x9F
-        data = struct.unpack("<HhhHhhhhhhhh", data)
-        self.data = data
-
-        self.T1 = data[0]
-        self.T2 = data[1]
-        self.T3 = data[2]
-        self.P1 = data[3]
-        self.P2 = data[4]
-        self.P3 = data[5]
-        self.P4 = data[6]
-        self.P5 = data[7]
-        self.P6 = data[8]
-        self.P7 = data[9]
-        self.P8 = data[10]
-        self.P9 = data[11]
+            self.T1 = datac[0]
+            self.T2 = datac[1]
+            self.T3 = datac[2]
+            self.P1 = datac[3]
+            self.P2 = datac[4]
+            self.P3 = datac[5]
+            self.P4 = datac[6]
+            self.P5 = datac[7]
+            self.P6 = datac[8]
+            self.P7 = datac[9]
+            self.P8 = datac[10]
+            self.P9 = datac[11]
 
 class Data:
     def __init__(self, data, compensation):
@@ -56,8 +67,8 @@ class Data:
             raise Exception("expected %d bytes, got %d" % (REG_DATA_LENGTH % len(data)))
         self.data = data
         self.compensation = compensation
-        self.pressure_raw = int.from_bytes(data[:3], "big") >> 4 # aka / 16
-        self.temperature_raw = int.from_bytes(data[3:], "big") >> 4 # aka / 16
+        self.pressure_raw = ((data[0] * 65536) + (data[1] * 256) + data[2]) / 16 #int.from_bytes(data[:3], "big") >> 4 # aka / 16
+        self.temperature_raw = ((data[3] * 65536) + (data[4] * 256) + data[5]) / 16 #int.from_bytes(data[3:], "big") >> 4 # aka / 16
         self.temperature = Data.calculate_temperature(self.temperature_raw, self.compensation)
         self.pressure = Data.calculate_pressure(self.pressure_raw, self.temperature, self.compensation)
 
@@ -162,3 +173,6 @@ class BMP280:
         data.insert(0, register_address)
         msg = smbus2.i2c_msg.write(_address, data)
         self._bus.i2c_rdwr(msg)
+        
+    def close(self):
+        self._bus.close()
